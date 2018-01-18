@@ -6,6 +6,8 @@ using Microsoft.TeamFoundation.WorkItemTracking.Client;
 using Microsoft.TeamFoundation;
 using Microsoft.TeamFoundation.Framework.Client;
 using System.Linq;
+using Microsoft.TeamFoundation.VersionControl.Client;
+using Microsoft.TeamFoundation.Framework.Common;
 
 namespace TfsManager
 {
@@ -20,7 +22,28 @@ namespace TfsManager
             public string Comment { get; set; }
             public long WorkItemId { get; set; }
             public long ChangesetId { get; set; }
+            public string BranchName { get; set; }
         }
+
+        private VersionControlServer _versionControlServer;
+
+        private VersionControlServer VersionControlServer
+        {
+            get
+            {
+                if (_versionControlServer == null)
+                {
+                    var tfsUri = new Uri(textBox1.Text);
+                    var tfs = TfsTeamProjectCollectionFactory.GetTeamProjectCollection(new Uri(textBox1.Text));
+                    tfs.Connect(ConnectOptions.None);
+                    var vcs = tfs.GetService<VersionControlServer>();
+                    _versionControlServer = vcs;
+                }
+                return _versionControlServer;
+            }
+        }
+
+
         private void button1_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(textBox1.Text))
@@ -29,6 +52,7 @@ namespace TfsManager
             if (string.IsNullOrEmpty(textBox2.Text))
                 return;
             richTextBox1.Text = string.Empty;
+
             var tfsUri = new Uri(textBox1.Text);
 
             var tpc = new TfsTeamProjectCollection(tfsUri);
@@ -79,7 +103,7 @@ namespace TfsManager
             richTextBox1.Text += 0 + "\t" + "ChangesetId" + "\t" + "WorkItemId" + "\t" + "Comment" + System.Environment.NewLine;
             for (var i = 0; i < list.Count; i++)
             {
-                richTextBox1.Text += i + 1 + "\t" + list[i].ChangesetId + "\t" + list[i].WorkItemId + "\t" + list[i].Comment + System.Environment.NewLine;
+                richTextBox1.Text += i + 1 + "\t" + list[i].ChangesetId + "\t" + list[i].WorkItemId + "\t" + list[i].Comment + "\t" + list[i].BranchName + System.Environment.NewLine;
             }
         }
 
@@ -96,16 +120,23 @@ namespace TfsManager
                     string externalLink = ((ExternalLink)link).LinkedArtifactUri;
                     var artifact = LinkingUtilities.DecodeUri(externalLink);
 
+
                     if (artifact.ArtifactType == "Changeset")
                     {
                         long csId = 0;
 
                         if (long.TryParse(artifact.ToolSpecificId, out csId))
                         {
+
+                            var cs = VersionControlServer.GetChangeset((int)csId);
+
                             var csItem = new ChangesetItem();
                             csItem.ChangesetId = csId;
                             csItem.WorkItemId = workItem.Id;
-                            csItem.Comment = "";
+                            csItem.Comment = ((ExternalLink)link).Comment;
+
+                            if (cs.Changes != null && cs.Changes.Length > 0 && cs.Changes[0].Item != null)
+                                csItem.BranchName = cs.Changes[0].Item.ServerItem;
                             list.Add(csItem);
                         }
                     }
